@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Estrai testo dai PDF</title>
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#f6f5f1;--surface:#fff;--text:#1d1d1b;--muted:#6b6a65;--border:#dcdad2;
+  --accent:#1f5eff;--accent-text:#fff;--ok:#1a7f4b;--err:#b3261e;--mark:#fff3b0;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#161614;--surface:#201f1d;--text:#efede6;--muted:#9a978e;--border:#37352f;
+    --accent:#6b9bff;--accent-text:#0b1020;--ok:#5fd394;--err:#ff8a80;--mark:#4a4210;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#161614;--surface:#201f1d;--text:#efede6;--muted:#9a978e;--border:#37352f;
+  --accent:#6b9bff;--accent-text:#0b1020;--ok:#5fd394;--err:#ff8a80;--mark:#4a4210;
+  color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:1.5rem;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:4px}
+input[type=text],input[type=number],select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font:inherit}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:640px){.grid{grid-template-columns:1fr}}
+.full{grid-column:1/-1}
+.checks{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px}
+.checks label{display:flex;align-items:center;gap:8px;margin:0;color:var(--text);font-size:.95rem}
+#drop{border:2px dashed var(--border);border-radius:12px;padding:28px 16px;text-align:center;cursor:pointer;color:var(--muted);transition:.15s}
+#drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--text)}
+#drop strong{color:var(--text)}
+button{font:inherit;padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em}
+td.val{white-space:pre-wrap;word-break:break-word;min-width:220px}
+td.val mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 2px}
+.none{color:var(--muted);font-style:italic}
+.err{color:var(--err)}
+.status{color:var(--muted);font-size:.9rem}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>Estrai testo dai PDF</h1>
+  <p class="sub">Importa uno o più PDF e ottieni il testo che segue un placeholder a tua scelta. Tutto avviene nel browser: i file non vengono caricati da nessuna parte.</p>
+
+  <div class="card">
+    <div class="grid">
+      <div class="full">
+        <label for="ph">Placeholder (il testo estratto è quello che segue)</label>
+        <input id="ph" type="text" value="Numero fattura:" autocomplete="off" spellcheck="false">
+      </div>
+      <div>
+        <label for="mode">Fino a dove estrarre</label>
+        <select id="mode">
+          <option value="line">Fine della riga</option>
+          <option value="end">Un secondo placeholder (fine)</option>
+          <option value="chars">Un numero di caratteri</option>
+          <option value="rest">Fine del documento</option>
+        </select>
+      </div>
+      <div id="endWrap" class="hide">
+        <label for="endPh">Placeholder di fine</label>
+        <input id="endPh" type="text" placeholder="es. Data:" autocomplete="off" spellcheck="false">
+      </div>
+      <div id="charsWrap" class="hide">
+        <label for="chars">Numero di caratteri</label>
+        <input id="chars" type="number" min="1" value="30">
+      </div>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="ci" checked> Ignora maiuscole/minuscole</label>
+      <label><input type="checkbox" id="all"> Tutte le occorrenze (non solo la prima)</label>
+      <label><input type="checkbox" id="trim" checked> Rimuovi spazi e “:” iniziali</label>
+    </div>
+  </div>
+
+  <div id="drop" tabindex="0" role="button" aria-label="Seleziona o trascina i PDF">
+    <strong>Trascina qui i PDF</strong> oppure clicca per sceglierli
+    <input id="file" type="file" accept="application/pdf,.pdf" multiple class="hide">
+  </div>
+
+  <div class="card" id="results" style="margin-top:16px">
+    <div class="row">
+      <span class="status" id="status">Nessun file caricato.</span>
+      <span>
+        <button id="copy" class="primary" disabled>Copia risultati</button>
+        <button id="clear" disabled>Svuota</button>
+      </span>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>File</th><th>#</th><th>Testo estratto</th></tr></thead>
+        <tbody id="body"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script>
+(function(){
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+  var $ = function(id){ return document.getElementById(id); };
+  var files = []; // {name, text, error}
+  var results = []; // righe {file, n, value}
+
+  // Impostazioni ricordate (se disponibile lo storage)
+  function load(){
+    try {
+      var s = JSON.parse(localStorage.getItem("estrai-pdf") || "{}");
+      if (s.ph != null) $("ph").value = s.ph;
+      if (s.mode) $("mode").value = s.mode;
+      if (s.endPh != null) $("endPh").value = s.endPh;
+      if (s.chars) $("chars").value = s.chars;
+      ["ci","all","trim"].forEach(function(k){ if (typeof s[k] === "boolean") $(k).checked = s[k]; });
+    } catch(e){}
+  }
+  function save(){
+    try {
+      localStorage.setItem("estrai-pdf", JSON.stringify({
+        ph:$("ph").value, mode:$("mode").value, endPh:$("endPh").value, chars:$("chars").value,
+        ci:$("ci").checked, all:$("all").checked, trim:$("trim").checked
+      }));
+    } catch(e){}
+  }
+
+  function esc(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+  // Il placeholder ignora differenze di spazi/a capo
+  function toRegex(s, flags){
+    var parts = s.trim().split(/\s+/).map(esc);
+    return new RegExp(parts.join("\\s+"), flags);
+  }
+
+  async function readPdf(file){
+    var buf = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    var out = [];
+    for (var p = 1; p <= pdf.numPages; p++){
+      var page = await pdf.getPage(p);
+      var tc = await page.getTextContent();
+      var line = "", lastY = null, lastEnd = null, lines = [];
+      tc.items.forEach(function(it){
+        if (!("str" in it)) return;
+        var x = it.transform[4], y = it.transform[5];
+        if (lastY !== null && Math.abs(y - lastY) > 2){
+          lines.push(line); line = ""; lastEnd = null;
+        }
+        if (line && lastEnd !== null && x - lastEnd > 1.5 && !/\s$/.test(line) && !/^\s/.test(it.str)) line += " ";
+        line += it.str;
+        lastY = y; lastEnd = x + (it.width || 0);
+        if (it.hasEOL){ lines.push(line); line = ""; lastY = null; lastEnd = null; }
+      });
+      if (line) lines.push(line);
+      out.push(lines.join("\n"));
+    }
+    return out.join("\n");
+  }
+
+  function extract(text){
+    var ph = $("ph").value;
+    if (!ph.trim()) return [];
+    var flags = $("ci").checked ? "gi" : "g";
+    var re = toRegex(ph, flags);
+    var mode = $("mode").value;
+    var trim = $("trim").checked;
+    var all = $("all").checked;
+    var found = [], m;
+    while ((m = re.exec(text)) !== null){
+      var start = m.index + m[0].length;
+      var rest = text.slice(start);
+      if (trim) rest = rest.replace(/^[ \t:]+/, "");
+      var val = "";
+      if (mode === "line"){
+        var lines = rest.split("\n");
+        val = lines[0];
+        if (!val.trim()){
+          for (var i = 1; i < lines.length; i++){ if (lines[i].trim()){ val = lines[i]; break; } }
+        }
+      } else if (mode === "end"){
+        var e = $("endPh").value;
+        if (e.trim()){
+          var er = toRegex(e, flags).exec(rest);
+          val = er ? rest.slice(0, er.index) : rest;
+        } else val = rest;
+      } else if (mode === "chars"){
+        val = rest.slice(0, Math.max(1, parseInt($("chars").value, 10) || 1));
+      } else {
+        val = rest;
+      }
+      val = val.replace(/\s+$/,"");
+      found.push(val);
+      if (!all) break;
+      if (m[0].length === 0) re.lastIndex++;
+    }
+    return found;
+  }
+
+  function render(){
+    var body = $("body");
+    body.textContent = "";
+    results = [];
+    files.forEach(function(f){
+      if (f.error){
+        var tr = document.createElement("tr");
+        addCell(tr, f.name);
+        addCell(tr, "–");
+        var td = addCell(tr, "Errore: " + f.error); td.className = "val err";
+        body.appendChild(tr);
+        return;
+      }
+      var found = extract(f.text);
+      if (!found.length){
+        var tr2 = document.createElement("tr");
+        addCell(tr2, f.name);
+        addCell(tr2, "–");
+        var td2 = addCell(tr2, $("ph").value.trim() ? "Placeholder non trovato" : "Inserisci un placeholder");
+        td2.className = "val none";
+        body.appendChild(tr2);
+        results.push({file:f.name, n:"", value:""});
+        return;
+      }
+      found.forEach(function(v, i){
+        var tr3 = document.createElement("tr");
+        addCell(tr3, i === 0 ? f.name : "");
+        addCell(tr3, String(i + 1));
+        var td3 = addCell(tr3, v);
+        td3.className = "val";
+        body.appendChild(tr3);
+        results.push({file:f.name, n:i + 1, value:v});
+      });
+    });
+    var ok = results.filter(function(r){ return r.value; }).length;
+    $("status").textContent = files.length
+      ? files.length + " file · " + ok + " risultat" + (ok === 1 ? "o" : "i")
+      : "Nessun file caricato.";
+    $("copy").disabled = !files.length;
+    $("clear").disabled = !files.length;
+  }
+  function addCell(tr, t){ var td = document.createElement("td"); td.textContent = t; tr.appendChild(td); return td; }
+
+  async function handleFiles(list){
+    if (!window.pdfjsLib){ alert("Libreria PDF non caricata. Riprova a ricaricare la pagina."); return; }
+    var arr = Array.prototype.slice.call(list).filter(function(f){ return /\.pdf$/i.test(f.name) || f.type === "application/pdf"; });
+    for (var i = 0; i < arr.length; i++){
+      $("status").textContent = "Lettura di " + arr[i].name + " (" + (i + 1) + "/" + arr.length + ")…";
+      try { files.push({name:arr[i].name, text: await readPdf(arr[i])}); }
+      catch(e){ files.push({name:arr[i].name, error: (e && e.message) || "PDF non leggibile"}); }
+    }
+    render();
+  }
+
+  function syncMode(){
+    var m = $("mode").value;
+    $("endWrap").classList.toggle("hide", m !== "end");
+    $("charsWrap").classList.toggle("hide", m !== "chars");
+  }
+
+  async function copyText(){
+    var rows = results.map(function(r){
+      return [r.file, r.n, r.value.replace(/[\t\r\n]+/g, " ")].join("\t");
+    });
+    var txt = ["File\t#\tTesto estratto"].concat(rows).join("\n");
+    var done = false;
+    try { await navigator.clipboard.writeText(txt); done = true; } catch(e){}
+    if (!done){
+      var ta = document.createElement("textarea");
+      ta.value = txt; document.body.appendChild(ta); ta.select();
+      try { done = document.execCommand("copy"); } catch(e){}
+      document.body.removeChild(ta);
+    }
+    var b = $("copy"), old = b.textContent;
+    b.textContent = done ? "Copiato ✓" : "Copia non riuscita";
+    setTimeout(function(){ b.textContent = old; }, 1600);
+  }
+
+  // Eventi
+  ["ph","endPh","chars"].forEach(function(id){ $(id).addEventListener("input", function(){ save(); render(); }); });
+  ["mode","ci","all","trim"].forEach(function(id){ $(id).addEventListener("change", function(){ syncMode(); save(); render(); }); });
+  var drop = $("drop"), input = $("file");
+  drop.addEventListener("click", function(){ input.click(); });
+  drop.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); input.click(); } });
+  input.addEventListener("change", function(){ handleFiles(input.files); input.value = ""; });
+  ["dragenter","dragover"].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave","drop"].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove("over"); }); });
+  drop.addEventListener("drop", function(e){ handleFiles(e.dataTransfer.files); });
+  $("copy").addEventListener("click", copyText);
+  $("clear").addEventListener("click", function(){ files = []; render(); });
+
+  load(); syncMode(); render();
+})();
+</script>
+</body>
+</html>
